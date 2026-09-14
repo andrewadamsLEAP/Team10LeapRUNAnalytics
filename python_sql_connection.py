@@ -1,20 +1,13 @@
 import psycopg
-import pandas as pd
 import os
 from dotenv import load_dotenv
 
 load_dotenv()
 
+
+ # Create and return a PostgreSQL database connection 
+ # Returns psycopg.Connection: A PostgreSQL database connection object
 def get_connection():
-    """
-    Create and return a PostgreSQL database connection using credentials from .env file.
-    
-    Returns:
-        psycopg.Connection: A PostgreSQL database connection object
-        
-    Raises:
-        Exception: If connection fails
-    """
     # Define connection variables from .env
     DB_HOST = os.getenv("DB_HOST")
     DB_PORT = int(os.getenv("DB_PORT"))
