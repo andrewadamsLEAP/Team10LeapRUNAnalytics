@@ -26,6 +26,7 @@ def fetch_instruments_data():
     finally:
         conn.close()
 
+
 # def check_prices_table():
 #     # Check if prices table has data
 #     conn = get_connection()
@@ -55,13 +56,31 @@ def fetch_instruments_data():
 #     finally:
 #         conn.close()
 
+def fetch_user_transactions(client_id: int ):
+    conn = get_connection()
+    try:
+        query = """ SELECT t.transaction_id , c.first_name, t.amount 
+        FROM transactions AS t INNER JOIN clients AS c 
+        ON t.client_id = c.client_id
+        WHERE t.client_id = %s;"""
+        
+        df = pd.read_sql(query, conn, params=(client_id,))
+        print(f"Fetched {len(df)} transactions")
+        return df.to_json(orient='records')
+    except Exception as e:
+        print(f"Error fetching transactions: {e}")
+        return None
+            
+    finally:
+        conn.close()
+
+
 def get_top_instruments(column = None, n = 10 ):
     # top n instruments based on a specific column
     # returns: DF --> JSON string
     if column is None:
         print("Column must be specified")
         return None
-
     conn = get_connection()
     try:
         query = f"""
@@ -102,6 +121,9 @@ def get_top_instruments(column = None, n = 10 ):
         
     finally:
         conn.close()
+        
+
+
 
 def get_price_chart_by_ticker(ticker, chart_type='line', interval='1min'):
     connection = get_connection()
