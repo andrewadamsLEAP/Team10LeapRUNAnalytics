@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from stock_statistics import fetch_instruments_data, fetch_user_transactions, calculate_stock_metrics
+from analytics import get_kpi_metrics
 
 app = FastAPI()
 
@@ -52,6 +53,21 @@ def get_stock_metrics(ticker: str):
             }
         else:
             raise HTTPException(status_code=404, detail="Stock metrics not found")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+@app.get("/api/kpis/")    
+def get_kpi_endpoints(days: int = 30):
+    try:
+        data = get_kpi_metrics(days=days)
+        if data:
+            return {
+                "status": "success",
+                "data": data,
+                "period_days": days
+            }
+        else:
+            raise HTTPException(status_code=404, detail="KPI metrics not found")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     
