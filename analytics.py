@@ -33,24 +33,23 @@ from python_sql_connection import get_connection
 #     finally:
 #         conn.close()
 
-
 def get_top_instruments(column = None, n = 10 ):
-    # top n instruments based on a specific column
-    # returns: DF --> JSON string
+    # Top n instruments based on a specific column
+    # Returns: DF --> JSON string
     if column is None:
         print("Column must be specified")
         return None
     conn = get_connection()
     try:
         query = f"""
-        SELECT ticker, price, open, high 
+        SELECT ticker, bid_price
         FROM prices
         WHERE (ticker, recorded_at) IN (
             SELECT ticker, MAX(recorded_at)
             FROM prices
             GROUP BY ticker
         )
-        ORDER BY price DESC
+        ORDER BY bid_price DESC
         LIMIT {n}
         """
         
@@ -63,7 +62,7 @@ def get_top_instruments(column = None, n = 10 ):
             return
         
         fig, ax = plt.subplots(figsize=(10, 6))
-        ax.bar(df['ticker'], df['price'])
+        ax.bar(df['ticker'], df['bid_price'])
         
         ax.set_xlabel('Ticker', fontsize=14)
         ax.set_ylabel('Price ($)', fontsize=14)
@@ -80,15 +79,12 @@ def get_top_instruments(column = None, n = 10 ):
         
     finally:
         conn.close()
-        
-
-
 
 def get_price_chart_by_ticker(ticker, chart_type='line', interval='1min'):
     connection = get_connection()
     try:
         query = f"""
-        SELECT ticker, price, recorded_at
+        SELECT ticker, bid_price, recorded_at
         FROM prices
         WHERE ticker = '{ticker}'
         ORDER BY recorded_at ASC
@@ -101,24 +97,24 @@ def get_price_chart_by_ticker(ticker, chart_type='line', interval='1min'):
             print(f"No data found for ticker: {ticker}")
             return
         
-        # convert recorded_at to datetime
+        # Convert recorded_at to datetime
         df['recorded_at'] = pd.to_datetime(df['recorded_at'])
         
-        # aggregate data by minut and group by minute and take last price of each minute
+        # Aggregate data by minut and group by minute and take last price of each minute
         df['minute'] = df['recorded_at'].dt.floor('1min')
-        df_agg = df.groupby('minute')['price'].last().reset_index()
+        df_agg = df.groupby('minute')['bid_price'].last().reset_index()
         
         print(f"DataFrame shape (aggregated by minute): {df_agg.shape}")
         
         fig, ax = plt.subplots(figsize=(12, 6))
         
         if chart_type == 'line':
-            ax.plot(df_agg['minute'], df_agg['price'], linewidth=2, markersize=6)
+            ax.plot(df_agg['minute'], df_agg['bid_price'], linewidth=2, markersize=6)
         elif chart_type == 'area':
-            ax.fill_between(df_agg['minute'], df_agg['price'], alpha=0.5)
-            ax.plot(df_agg['minute'], df_agg['price'], linewidth=2)
+            ax.fill_between(df_agg['minute'], df_agg['bid_price'], alpha=0.5)
+            ax.plot(df_agg['minute'], df_agg['bid_price'], linewidth=2)
         elif chart_type == 'bar':
-            ax.bar(df_agg['minute'], df_agg['price'], width=0.02)
+            ax.bar(df_agg['minute'], df_agg['bid_price'], width=0.02)
         
         ax.set_xlim([df_agg['minute'].min(), df_agg['minute'].max()])
         ax.set_xlabel('Time (UTC)', fontsize=14)
@@ -127,7 +123,7 @@ def get_price_chart_by_ticker(ticker, chart_type='line', interval='1min'):
         ax.set_title(f'{ticker} Price Throughout the Day', fontsize=14)
         ax.grid(True, alpha=0.3)
         
-        # x-axis to show time in HH:MM format
+        # X-axis to show time in HH:MM format
         ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
         ax.xaxis.set_major_locator(mdates.HourLocator(interval=1))
         
@@ -142,6 +138,78 @@ def get_price_chart_by_ticker(ticker, chart_type='line', interval='1min'):
     finally:
         connection.close()
 
+def get_kpi_metrics(days=30):
+    conn = get_connection()
+    try:
+        kpi_data = {}
+        
+        # Total trades or orders placed
+        trades_df = pd.read_sql("SELECT COUNT(*) as count FROM orders", conn)
+        kpi_data['total_trades'] = int(trades_df['count'][0])
+        
+        # Total trading volume (sum of quantity * price)
+        volume_df = pd.read_sql("SELECT SUM(quantity * price) as total FROM orders", conn)
+        kpi_data['total_volume'] = float(volume_df['total'][0]) if volume_df['total'][0] else 0
+        
+        # Average trade value
+        avg_df = pd.read_sql("SELECT AVG(quantity * price) as avg FROM orders", conn)
+        kpi_data['avg_trade_value'] = float(avg_df['avg'][0]) if avg_df['avg'][0] else 0
+        
+        # Total clients
+        clients_df = pd.read_sql("SELECT COUNT(*) as count FROM clients", conn)
+        kpi_data['total_clients'] = int(clients_df['count'][0])
+        
+        # Active clients who have traded within last N days
+        active_clients_df = pd.read_sql(
+            f"""SELECT COUNT(DISTINCT client_id) as count 
+               FROM orders 
+               WHERE order_date >= CURRENT_DATE - INTERVAL '{days} days'""", conn
+        )
+        kpi_data['active_clients'] = int(active_clients_df['count'][0])
+        kpi_data['active_clients_percentage'] = round(
+            (kpi_data['active_clients'] / kpi_data['total_clients'] * 100) 
+            if kpi_data['total_clients'] > 0 else 0, 
+            2
+        )
+        
+        # Top 5 active clients
+        top_active_df = pd.read_sql(
+            f"""SELECT
+                c.client_id,
+                c.first_name,
+                c.last_name,
+                COUNT(DISTINCT o.order_id) as trade_count,
+                SUM(o.quantity * o.price) as volume
+            FROM clients c
+            INNER JOIN orders o ON c.client_id = o.client_id
+            WHERE o.order_date >= CURRENT_DATE - INTERVAL '{days} days'
+            GROUP BY c.client_id, c.first_name, c.last_name
+            ORDER BY volume DESC
+            LIMIT 5""", conn
+        )
+        kpi_data['top_active_clients'] = top_active_df.to_dict(orient='records')
+        
+        # Inactive clients who have no trades in last N days
+        inactive_df = pd.read_sql(
+            f"""SELECT COUNT(DISTINCT client_id) as count
+               FROM clients c
+               WHERE NOT EXISTS (
+                   SELECT 1 FROM orders o 
+                   WHERE o.client_id = c.client_id 
+                   AND o.order_date >= CURRENT_DATE - INTERVAL '{days} days'
+               )""", conn
+        )
+        kpi_data['inactive_clients'] = int(inactive_df['count'][0])
+        
+        return kpi_data
+        
+    except Exception as e:
+        print(f"Error calculating KPIs: {e}")
+        return None
+        
+    finally:
+        conn.close()
+
 if __name__ == "__main__":
     # print("=== Checking Prices Table ===")
     # check_prices_table()
@@ -152,7 +220,7 @@ if __name__ == "__main__":
     #     print(instruments)
         
     print("\n=== Top 10 Instruments ===")
-    get_top_instruments(column='price', n=10)
+    get_top_instruments(column='bid_price', n=10)
     
     print("\n=== Price Chart for Specific Ticker ===")
     get_price_chart_by_ticker(ticker='AAPL', chart_type='line')
