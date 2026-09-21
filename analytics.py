@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
+import streamlit as st
 from python_sql_connection import get_connection
 
 # def check_prices_table():
@@ -43,14 +44,14 @@ def get_top_instruments(column = None, n = 10 ):
     conn = get_connection()
     try:
         query = f"""
-        SELECT ticker, price, open, high 
+        SELECT ticker, bid_price
         FROM prices
         WHERE (ticker, recorded_at) IN (
             SELECT ticker, MAX(recorded_at)
             FROM prices
             GROUP BY ticker
         )
-        ORDER BY price DESC
+        ORDER BY bid_price DESC
         LIMIT {n}
         """
         
@@ -63,7 +64,7 @@ def get_top_instruments(column = None, n = 10 ):
             return
         
         fig, ax = plt.subplots(figsize=(10, 6))
-        ax.bar(df['ticker'], df['price'])
+        ax.bar(df['ticker'], df['bid_price'])
         
         ax.set_xlabel('Ticker', fontsize=14)
         ax.set_ylabel('Price ($)', fontsize=14)
@@ -80,15 +81,12 @@ def get_top_instruments(column = None, n = 10 ):
         
     finally:
         conn.close()
-        
-
-
 
 def get_price_chart_by_ticker(ticker, chart_type='line', interval='1min'):
     connection = get_connection()
     try:
         query = f"""
-        SELECT ticker, price, recorded_at
+        SELECT ticker, bid_price, recorded_at
         FROM prices
         WHERE ticker = '{ticker}'
         ORDER BY recorded_at ASC
@@ -106,19 +104,19 @@ def get_price_chart_by_ticker(ticker, chart_type='line', interval='1min'):
         
         # aggregate data by minut and group by minute and take last price of each minute
         df['minute'] = df['recorded_at'].dt.floor('1min')
-        df_agg = df.groupby('minute')['price'].last().reset_index()
+        df_agg = df.groupby('minute')['bid_price'].last().reset_index()
         
         print(f"DataFrame shape (aggregated by minute): {df_agg.shape}")
         
         fig, ax = plt.subplots(figsize=(12, 6))
         
         if chart_type == 'line':
-            ax.plot(df_agg['minute'], df_agg['price'], linewidth=2, markersize=6)
+            ax.plot(df_agg['minute'], df_agg['bid_price'], linewidth=2, markersize=6)
         elif chart_type == 'area':
-            ax.fill_between(df_agg['minute'], df_agg['price'], alpha=0.5)
-            ax.plot(df_agg['minute'], df_agg['price'], linewidth=2)
+            ax.fill_between(df_agg['minute'], df_agg['bid_price'], alpha=0.5)
+            ax.plot(df_agg['minute'], df_agg['bid_price'], linewidth=2)
         elif chart_type == 'bar':
-            ax.bar(df_agg['minute'], df_agg['price'], width=0.02)
+            ax.bar(df_agg['minute'], df_agg['bid_price'], width=0.02)
         
         ax.set_xlim([df_agg['minute'].min(), df_agg['minute'].max()])
         ax.set_xlabel('Time (UTC)', fontsize=14)
@@ -142,6 +140,35 @@ def get_price_chart_by_ticker(ticker, chart_type='line', interval='1min'):
     finally:
         connection.close()
 
+def get_kpi_metrics():
+    conn = get_connection()
+    try:
+        kpi_data = {}
+        
+        # total trades or orders placed
+        trades_df = pd.read_sql("SELECT COUNT(*) as count FROM orders", conn)
+        kpi_data['total_trades'] = int(trades_df['count'][0])
+        
+        # total trading volume
+        volume_df = pd.read_sql("SELECT SUM(quantity * price) as total FROM transactions")
+        kpi_data['total_volume'] = float(volume_df['total'][0]) if volume_df['total'][0] else 0
+        
+        # total clients
+        clients_df = pd.read_sql("SELECT COUNT (*) as count FROM clients", conn)
+        kpi_data['total_clients'] = int(clients_df['count'][0])
+        
+        # active clients
+        
+        
+        # total trade value
+        
+        
+        # average trades per client
+        
+        
+    finally:
+        conn.close()
+
 if __name__ == "__main__":
     # print("=== Checking Prices Table ===")
     # check_prices_table()
@@ -152,7 +179,7 @@ if __name__ == "__main__":
     #     print(instruments)
         
     print("\n=== Top 10 Instruments ===")
-    get_top_instruments(column='price', n=10)
+    get_top_instruments(column='bid_price', n=10)
     
     print("\n=== Price Chart for Specific Ticker ===")
     get_price_chart_by_ticker(ticker='AAPL', chart_type='line')
