@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from stock_statistics import fetch_instruments_data, fetch_user_transactions, calculate_stock_metrics
-from analytics import get_kpi_metrics
+from analytics import get_kpi_metrics, get_instrument_metrics, get_timeseries_metrics, get_client_segments, get_instrument_details
 
 app = FastAPI()
 
@@ -56,8 +56,8 @@ def get_stock_metrics(ticker: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     
-@app.get("/api/kpis/")    
-def get_kpi_endpoints(days: int = 30):
+@app.get("/api/analytics/")    
+def get_analytics_overview(days: int = 30):
     try:
         data = get_kpi_metrics(days=days)
         if data:
@@ -67,9 +67,76 @@ def get_kpi_endpoints(days: int = 30):
                 "period_days": days
             }
         else:
-            raise HTTPException(status_code=404, detail="KPI metrics not found")
+            raise HTTPException(status_code=404, detail="Analytics overview not found")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/analytics/by-instrument")
+def get_instrument_analytics(days: int = 30):
+    try:
+        data = get_instrument_metrics(days=days)
+        if data:
+            return {
+                "status": "success",
+                "data": data,
+                "period_days": days
+            }
+        else:
+            raise HTTPException(status_code=404, detail="Instrument analytics not found")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/analytics/trends")
+def get_analytics_trends(days: int = 30, granularity: str = "daily"):
+    try:
+        if granularity not in ["daily", "weekly", "monthly"]:
+            raise HTTPException(status_code=400, detail="Granularity must be 'daily', 'weekly', or 'monthly'")
+        
+        data = get_timeseries_metrics(days=days, granularity=granularity)
+        if data:
+            return {
+                "status": "success",
+                "data": data,
+                "period_days": days,
+                "granularity": granularity
+            }
+        else:
+            raise HTTPException(status_code=404, detail="Trend analytics not found")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/analytics/by-client")
+def get_client_analytics(days: int = 30):
+    try:
+        data = get_client_segments(days=days)
+        if data:
+            return {
+                "status": "success",
+                "data": data,
+                "period_days": days
+            }
+        else:
+            raise HTTPException(status_code=404, detail="Client analytics not found")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/analytics/instrument/{ticker}")
+def get_instrument_details_endpoint(ticker: str, days: int = 30):
+    try:
+        data = get_instrument_details(ticker=ticker, days=days)
+        if data:
+            return {
+                "status": "success",
+                "data": data,
+                "period_days": days
+            }
+        else:
+            raise HTTPException(status_code=404, detail=f"No data found for ticker {ticker}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
     
 if __name__ == "__main__":
     import uvicorn
