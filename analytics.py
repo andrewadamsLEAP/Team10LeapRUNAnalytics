@@ -216,7 +216,6 @@ def get_instrument_metrics(days=30):
         query = f"""
         SELECT 
             i.ticker,
-            i.company_name as instrument_name,
             i.asset_type,
             COUNT(DISTINCT o.order_id) as trade_count,
             SUM(o.quantity) as total_quantity,
@@ -228,7 +227,7 @@ def get_instrument_metrics(days=30):
         FROM instruments i
         LEFT JOIN orders o ON i.ticker = o.ticker
             AND o.order_date >= CURRENT_DATE - INTERVAL '{days} days'
-        GROUP BY i.ticker, i.company_name, i.asset_type
+        GROUP BY i.ticker, i.asset_type
         ORDER BY total_volume DESC NULLS LAST
         """
         
@@ -360,7 +359,6 @@ def get_instrument_details(ticker, days=30):
         query = f"""
         SELECT 
             i.ticker,
-            i.company_name,
             i.asset_type,
             COUNT(DISTINCT o.order_id) as trade_count,
             SUM(o.quantity) as total_quantity,
@@ -373,7 +371,7 @@ def get_instrument_details(ticker, days=30):
         LEFT JOIN orders o ON i.ticker = o.ticker
             AND o.order_date >= CURRENT_DATE - INTERVAL '{days} days'
         WHERE i.ticker = %s
-        GROUP BY i.ticker, i.company_name, i.asset_type
+        GROUP BY i.ticker, i.asset_type
         """
         
         metrics_df = pd.read_sql(query, conn, params=(ticker,))

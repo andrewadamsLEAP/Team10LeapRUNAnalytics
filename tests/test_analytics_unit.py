@@ -94,6 +94,131 @@ class AnalyticsUnitTests(unittest.TestCase):
 
     @patch('analytics.get_connection')
     @patch('analytics.pd.read_sql')
+    def test_get_instrument_metrics_returns_list(self, mock_read_sql, mock_get_conn):
+        """Test that get_instrument_metrics returns list of instruments"""
+        mock_get_conn.return_value = self.mock_conn
+        
+        mock_read_sql.return_value = pd.DataFrame({
+            'ticker': ['AAPL', 'MSFT', 'GOOGL'],
+            'instrument_name': ['Apple Inc.', 'Microsoft Corporation', 'Alphabet Inc.'],
+            'asset_type': ['STOCK', 'STOCK', 'STOCK'],
+            'trade_count': [10, 8, 5],
+            'total_quantity': [100, 80, 50],
+            'total_volume': [25000.00, 20000.00, 15000.00],
+            'avg_trade_value': [2500.00, 2500.00, 3000.00],
+            'min_price': [150.00, 300.00, 140.00],
+            'max_price': [160.00, 310.00, 150.00],
+            'unique_traders': [5, 4, 3]
+        })
+        
+        result = analytics.get_instrument_metrics(days=30)
+        
+        self.assertIsNotNone(result)
+        self.assertIsInstance(result, list)
+        self.assertEqual(len(result), 3)
+        self.assertEqual(result[0]['ticker'], 'AAPL')
+        self.assertEqual(result[0]['trade_count'], 10)
+
+    @patch('analytics.get_connection')
+    @patch('analytics.pd.read_sql')
+    def test_get_timeseries_metrics_returns_list(self, mock_read_sql, mock_get_conn):
+        """Test that get_timeseries_metrics returns time-series data"""
+        mock_get_conn.return_value = self.mock_conn
+        
+        mock_read_sql.return_value = pd.DataFrame({
+            'period': pd.to_datetime(['2026-09-01', '2026-09-02', '2026-09-03']),
+            'trade_count': [50, 55, 48],
+            'total_volume': [125000.00, 135000.00, 120000.00],
+            'avg_trade_value': [2500.00, 2454.55, 2500.00],
+            'active_clients': [10, 12, 10],
+            'instruments_traded': [8, 9, 7]
+        })
+        
+        result = analytics.get_timeseries_metrics(days=30, granularity='daily')
+        
+        self.assertIsNotNone(result)
+        self.assertIsInstance(result, list)
+        self.assertEqual(len(result), 3)
+        self.assertEqual(result[0]['trade_count'], 50)
+
+    @patch('analytics.get_connection')
+    @patch('analytics.pd.read_sql')
+    def test_get_client_segments_returns_dict(self, mock_read_sql, mock_get_conn):
+        """Test that get_client_segments returns summary and detailed data"""
+        mock_get_conn.return_value = self.mock_conn
+        
+        # Mock initial query for client data
+        mock_read_sql.return_value = pd.DataFrame({
+            'client_id': [1, 2, 3, 4, 5],
+            'first_name': ['John', 'Jane', 'Mike', 'Sarah', 'Bob'],
+            'last_name': ['Doe', 'Smith', 'Johnson', 'Williams', 'Brown'],
+            'trade_count': [10, 20, 5, 15, 1],
+            'total_volume': [25000.00, 8000.00, 3000.00, 20000.00, 2000.00],
+            'avg_trade_value': [2500.00, 400.00, 600.00, 1333.33, 2000.00],
+            'instruments_traded': [5, 3, 2, 4, 1],
+            'last_trade_date': pd.to_datetime(['2026-09-20', '2026-09-19', '2026-08-15', '2026-09-21', '2026-09-01'])
+        })
+        
+        result = analytics.get_client_segments(days=30)
+        
+        self.assertIsNotNone(result)
+        self.assertIsInstance(result, dict)
+        self.assertIn('summary', result)
+        self.assertIn('detailed', result)
+        self.assertIsInstance(result['summary'], list)
+        self.assertIsInstance(result['detailed'], list)
+
+    @patch('analytics.get_connection')
+    @patch('analytics.pd.read_sql')
+    def test_get_instrument_details_returns_dict(self, mock_read_sql, mock_get_conn):
+        """Test that get_instrument_details returns instrument, traders, and trends"""
+        mock_get_conn.return_value = self.mock_conn
+        
+        # Mock instrument metrics
+        metrics_df = pd.DataFrame({
+            'ticker': ['AAPL'],
+            'company_name': ['Apple Inc.'],
+            'asset_type': ['STOCK'],
+            'trade_count': [10],
+            'total_quantity': [100],
+            'total_volume': [25000.00],
+            'avg_trade_value': [2500.00],
+            'min_price': [240.00],
+            'max_price': [250.00],
+            'unique_traders': [5]
+        })
+        
+        # Mock top traders
+        traders_df = pd.DataFrame({
+            'client_id': [1, 2, 3],
+            'first_name': ['John', 'Jane', 'Mike'],
+            'last_name': ['Doe', 'Smith', 'Johnson'],
+            'trade_count': [4, 3, 2],
+            'volume': [10000.00, 8000.00, 5000.00]
+        })
+        
+        # Mock daily trend
+        trend_df = pd.DataFrame({
+            'date': pd.to_datetime(['2026-09-20', '2026-09-21']),
+            'trade_count': [5, 5],
+            'daily_volume': [12500.00, 12500.00]
+        })
+        
+        mock_read_sql.side_effect = [metrics_df, traders_df, trend_df]
+        
+        result = analytics.get_instrument_details(ticker='AAPL', days=30)
+        
+        self.assertIsNotNone(result)
+        self.assertIsInstance(result, dict)
+        self.assertIn('instrument', result)
+        self.assertIn('top_traders', result)
+        self.assertIn('daily_trend', result)
+        self.assertEqual(result['instrument']['ticker'], 'AAPL')
+        self.assertIsInstance(result['top_traders'], list)
+        self.assertIsInstance(result['daily_trend'], list)
+
+    @patch('analytics.get_connection')
+    @patch('analytics.pd.read_sql')
     def test_get_kpi_metrics_handles_null_volume(self, mock_read_sql, mock_get_conn):
         """Test that null volume is handled as 0"""
         mock_get_conn.return_value = self.mock_conn
