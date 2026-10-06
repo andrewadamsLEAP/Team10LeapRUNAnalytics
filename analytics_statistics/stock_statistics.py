@@ -1,11 +1,15 @@
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import pandas as pd
-from python_sql_connection import get_connection
+from shared.database_connections import get_warehouse_connection
 from decimal import Decimal
 
 def fetch_instruments_data():
     # Fetch all instruments from the database and return as JSON.
     # Returns: DF --> JSON string
-    conn = get_connection()
+    conn = get_warehouse_connection()
     try:
         query = """
         SELECT * 
@@ -24,7 +28,7 @@ def fetch_instruments_data():
         conn.close()
         
 def fetch_user_transactions(client_id: int ):
-    conn = get_connection()
+    conn = get_warehouse_connection()
     try:
         query = """ SELECT t.transaction_id , c.first_name, t.amount 
         FROM transactions AS t INNER JOIN clients AS c 
@@ -44,7 +48,7 @@ def fetch_user_transactions(client_id: int ):
 def fetch_prices_data():
     # Fetch all prices from the database and return as JSON.
     # Returns: DF --> JSON string
-    conn = get_connection()
+    conn = get_warehouse_connection()
     try:
         query = """
         SELECT * 
@@ -65,7 +69,7 @@ def fetch_prices_data():
 def fetch_prices_by_ticker_and_date(ticker: str, quote_timestamp: pd.Timestamp):
     # Fetch all prices table data for the day and ticker from the database and return as JSON.
     # Returns: DF --> JSON string
-    conn = get_connection()
+    conn = get_warehouse_connection()
     try:
         day_start = pd.Timestamp(quote_timestamp)
         if day_start.tzinfo is None:
