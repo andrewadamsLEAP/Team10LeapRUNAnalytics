@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  etl-analytics:
+    build: .
+    container_name: etl-analytics
+    network_mode: "host"
+    environment:
+      MAIN_DB_HOST: ${MAIN_DB_HOST}
+      MAIN_DB_PORT: ${MAIN_DB_PORT}
+      MAIN_DB_NAME: ${MAIN_DB_NAME}
+      MAIN_DB_USER: ${MAIN_DB_USER}
+      MAIN_DB_PASSWORD: ${MAIN_DB_PASSWORD}
+      DW_HOST: ${WAREHOUSE_DB_HOST}
+      DW_PORT: ${WAREHOUSE_DB_PORT}
+      DW_NAME: ${WAREHOUSE_DB_NAME}
+      DW_USER: ${WAREHOUSE_DB_USER}
+      DW_PASSWORD: ${WAREHOUSE_DB_PASSWORD}
+    volumes:
+      - .:/app
+      - ./logs:/app/logs
+    restart: always
