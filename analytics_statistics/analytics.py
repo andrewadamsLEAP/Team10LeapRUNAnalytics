@@ -1,12 +1,16 @@
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
-from python_sql_connection import get_connection
+from shared.database_connections import get_warehouse_connection
 
 # def check_prices_table():
 #     # Check if prices table has data
-#     conn = get_connection()
+#     conn = get_warehouse_connection()
 #     try:
 #         query = "SELECT COUNT(*) as row_count FROM prices"
 #         result = pd.read_sql(query, conn)
@@ -39,7 +43,7 @@ def get_top_instruments(column = None, n = 10 ):
     if column is None:
         print("Column must be specified")
         return None
-    conn = get_connection()
+    conn = get_warehouse_connection()
     try:
         query = f"""
         SELECT ticker, bid_price
@@ -81,7 +85,7 @@ def get_top_instruments(column = None, n = 10 ):
         conn.close()
 
 def get_price_chart_by_ticker(ticker, chart_type='line', interval='1min'):
-    connection = get_connection()
+    connection = get_warehouse_connection()
     try:
         query = f"""
         SELECT ticker, bid_price, recorded_at
@@ -139,7 +143,7 @@ def get_price_chart_by_ticker(ticker, chart_type='line', interval='1min'):
         connection.close()
 
 def get_kpi_metrics(days=30):
-    conn = get_connection()
+    conn = get_warehouse_connection()
     try:
         kpi_data = {}
         
@@ -211,7 +215,7 @@ def get_kpi_metrics(days=30):
         conn.close()
 
 def get_instrument_metrics(days=30):
-    conn = get_connection()
+    conn = get_warehouse_connection()
     try:
         query = f"""
         SELECT 
@@ -249,7 +253,7 @@ def get_instrument_metrics(days=30):
         conn.close()
 
 def get_timeseries_metrics(days=30, granularity='daily'):
-    conn = get_connection()
+    conn = get_warehouse_connection()
     try:
         if granularity == 'daily':
             date_format = "DATE(o.order_date)"
@@ -294,7 +298,7 @@ def get_timeseries_metrics(days=30, granularity='daily'):
         conn.close()
 
 def get_client_segments(days=30):
-    conn = get_connection()
+    conn = get_warehouse_connection()
     try:
         query = f"""
         SELECT 
@@ -354,7 +358,7 @@ def get_client_segments(days=30):
         conn.close()
 
 def get_instrument_details(ticker, days=30):
-    conn = get_connection()
+    conn = get_warehouse_connection()
     try:
         query = f"""
         SELECT 
@@ -419,6 +423,7 @@ def get_instrument_details(ticker, days=30):
             'top_traders': traders_df.to_dict(orient='records'),
             'daily_trend': daily_df.to_dict(orient='records')
         }
+        
     
     except Exception as e:
         print(f"Error fetching instrument details: {e}")
