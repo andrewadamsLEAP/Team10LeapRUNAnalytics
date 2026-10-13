@@ -16,7 +16,26 @@ services:
       DW_NAME: ${WAREHOUSE_DB_NAME}
       DW_USER: ${WAREHOUSE_DB_USER}
       DW_PASSWORD: ${WAREHOUSE_DB_PASSWORD}
-    volumes:
-      - .:/app
-      - ./logs:/app/logs
-    restart: always
+    ports:
+      - "5000:5000"
+    networks:
+      - leap-network
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.hostname == worker-node
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  leap-network:
+    driver: overlay
+    attachable: true

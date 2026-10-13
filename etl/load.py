@@ -77,26 +77,26 @@ def loadPrices(price_rows):
         INSERT INTO prices (
             price_id,
             ticker, 
-            askprice,
-            asksize,
-            bidprice,
-            bidsize,
-            askexchange,
-            bidexchange,
-            tapes,
+            ask_price,
+            ask_size,
+            bid_price,
+            bid_size,
+            ask_exchange,
+            bid_exchange,
+            tape,
             recorded_at
         )
         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         ON CONFLICT (price_id)
         DO UPDATE SET
             ticker = EXCLUDED.ticker,
-            askprice = EXCLUDED.askprice,
-            asksize = EXCLUDED.asksize,
-            bidprice = EXCLUDED.bidprice,
-            bidsize = EXCLUDED.bidsize,
-            askexchange = EXCLUDED.askexchange,
-            bidexchange = EXCLUDED.bidexchange,
-            tapes = EXCLUDED.tapes,
+            ask_price = EXCLUDED.ask_price,
+            ask_size = EXCLUDED.ask_size,
+            bid_price = EXCLUDED.bid_price,
+            bid_size = EXCLUDED.bid_size,
+            ask_exchange = EXCLUDED.ask_exchange,
+            bid_exchange = EXCLUDED.bid_exchange,
+            tape = EXCLUDED.tape,
             recorded_at = EXCLUDED.recorded_at
     """
 
