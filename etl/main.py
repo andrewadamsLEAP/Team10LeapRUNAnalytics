@@ -1,6 +1,7 @@
 from apscheduler.schedulers.blocking import BlockingScheduler
 from pipeline import run
 import os
+import traceback
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -9,7 +10,8 @@ def safe_run():
     try:
         run()
     except Exception:
-        print("ETL run failed; watermark was not advanced")
+        print("ETL run failed; watermark was not advanced", flush=True)
+        traceback.print_exc()
 
 
 if __name__ == "__main__":
