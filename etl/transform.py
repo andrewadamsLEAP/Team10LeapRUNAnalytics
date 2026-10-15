@@ -40,8 +40,12 @@ def transformEmployees(employee_rows):
 
 
 def transformPrices(price_rows):
-    """Normalize datetime in price rows"""
-    return _normalize_rows(price_rows)
+    """Normalize ticker and datetime values in price rows"""
+    normalized_rows = _normalize_rows(price_rows)
+    return [
+        (*row[:1], row[1].replace("/", "-") if row[1] else row[1], *row[2:])
+        for row in normalized_rows
+    ]
 
 
 def transformTransactions(transaction_rows):

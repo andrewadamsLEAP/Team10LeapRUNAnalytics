@@ -10,7 +10,7 @@ ETL_NAME = "trading_db_etl"
 
 def get_last_watermark(table_name):
     """Get watermark for a specific table"""
-    query = "SELECT last_watermark FROM watermark_etl WHERE name_id = %s"
+    query = "SELECT last_watermark FROM watermark_etl WHERE etl_name = %s"
     
     try:
         conn = get_warehouse_connection()
@@ -29,7 +29,7 @@ def get_last_watermark(table_name):
     
 def update_last_watermark(table_name, new_watermark):
     """Update watermark for a specific table"""
-    query = "UPDATE watermark_etl SET last_watermark = %s WHERE name_id = %s"
+    query = "UPDATE watermark_etl SET last_watermark = %s WHERE etl_name = %s"
     
     try:
         conn = get_warehouse_connection()
