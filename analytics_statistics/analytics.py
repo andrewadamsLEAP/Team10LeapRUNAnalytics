@@ -297,6 +297,53 @@ def get_timeseries_metrics(days=30, granularity='daily'):
     finally:
         conn.close()
 
+def get_order_status_metrics(days=30, client_id=None):
+    conn = get_warehouse_connection()
+    try:
+        query = """
+        SELECT
+            c.client_id,
+            c.first_name,
+            c.last_name,
+            COUNT(o.order_id) AS total_orders,
+            COUNT(o.order_id) FILTER (WHERE UPPER(o.order_status) = 'FULFILLED') AS fulfilled_orders,
+            COUNT(o.order_id) FILTER (WHERE UPPER(o.order_status) = 'PENDING') AS pending_orders,
+            COUNT(o.order_id) FILTER (WHERE UPPER(o.order_status) IN ('CANCELLED', 'CANCELED')) AS cancelled_orders
+        FROM clients c
+        LEFT JOIN orders o
+            ON c.client_id = o.client_id
+            AND o.order_date >= CURRENT_DATE - (%s * INTERVAL '1 day')
+        """
+        params = [days]
+
+        if client_id is not None:
+            query += " WHERE c.client_id = %s"
+            params.append(client_id)
+
+        query += """
+        GROUP BY c.client_id, c.first_name, c.last_name
+        ORDER BY c.client_id
+        """
+
+        df = pd.read_sql(query, conn, params=tuple(params)).fillna(0)
+        numeric_cols = [
+            'total_orders',
+            'fulfilled_orders',
+            'pending_orders',
+            'cancelled_orders'
+        ]
+        for col in numeric_cols:
+            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
+
+        return df.to_dict(orient='records')
+
+    except Exception as e:
+        print(f"Error fetching order status metrics: {e}")
+        return None
+
+    finally:
+        conn.close()
+
 def get_client_segments(days=30):
     conn = get_warehouse_connection()
     try:

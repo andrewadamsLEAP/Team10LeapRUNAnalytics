@@ -1,11 +1,17 @@
 import sys
 import os
+from io import BytesIO
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
+from matplotlib.backends.backend_agg import FigureCanvasAgg
+from matplotlib.figure import Figure
+import pandas as pd
 from stock_statistics import fetch_instruments_data, fetch_user_transactions, calculate_stock_metrics
-from analytics import get_kpi_metrics, get_instrument_metrics, get_timeseries_metrics, get_client_segments, get_instrument_details
+from analytics import get_kpi_metrics, get_instrument_metrics, get_timeseries_metrics, get_order_status_metrics, get_client_segments, get_instrument_details
 
 app = FastAPI()
 
@@ -111,6 +117,57 @@ def get_analytics_trends(days: int = 30, granularity: str = "daily"):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/api/analytics/trends/graph")
+def get_analytics_trends_graph(
+    days: int = 30,
+    granularity: str = "daily",
+    metric: str = "total_volume"
+):
+    allowed_granularities = ["daily", "weekly", "monthly"]
+    allowed_metrics = [
+        "trade_count",
+        "total_volume",
+        "avg_trade_value",
+        "active_clients",
+        "instruments_traded"
+    ]
+
+    try:
+        if granularity not in allowed_granularities:
+            raise HTTPException(
+                status_code=400,
+                detail="Granularity must be 'daily', 'weekly', or 'monthly'"
+            )
+        if metric not in allowed_metrics:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Metric must be one of: {', '.join(allowed_metrics)}"
+            )
+
+        data = get_timeseries_metrics(days=days, granularity=granularity)
+        if not data:
+            raise HTTPException(status_code=404, detail="Trend analytics not found")
+
+        frame = pd.DataFrame(data)
+        frame["period"] = pd.to_datetime(frame["period"])
+
+        figure = Figure(figsize=(10, 5), dpi=120)
+        axis = figure.add_subplot(1, 1, 1)
+        axis.plot(frame["period"], frame[metric], marker="o", linewidth=2)
+        axis.set_title(f"{metric.replace('_', ' ').title()} Trend")
+        axis.set_xlabel("Period")
+        axis.set_ylabel(metric.replace("_", " ").title())
+        axis.grid(True, alpha=0.3)
+        figure.autofmt_xdate()
+
+        image = BytesIO()
+        FigureCanvasAgg(figure).print_png(image)
+        return Response(content=image.getvalue(), media_type="image/png")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/api/analytics/by-client")
 def get_client_analytics(days: int = 30):
     try:
@@ -123,6 +180,23 @@ def get_client_analytics(days: int = 30):
             }
         else:
             raise HTTPException(status_code=404, detail="Client analytics not found")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/analytics/order-status")
+def get_client_order_status(days: int = 30, client_id: int = None):
+    try:
+        data = get_order_status_metrics(days=days, client_id=client_id)
+        if data is not None:
+            return {
+                "status": "success",
+                "data": data,
+                "period_days": days,
+                "client_id": client_id
+            }
+        raise HTTPException(status_code=404, detail="Order status data not found")
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
