@@ -6,6 +6,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
+from datetime import timedelta
 from shared.database_connections import get_warehouse_connection
 
 # def check_prices_table():
@@ -36,6 +37,101 @@ from shared.database_connections import get_warehouse_connection
         
 #     finally:
 #         conn.close()
+
+def _order_conditions(days=30, ticker=None, client_id=None, start_date=None,
+                      end_date=None, order_status=None):
+    """Build bound SQL parameters; end_date includes the entire selected day."""
+    clauses, params = [], []
+    if start_date is not None:
+        clauses.append("o.order_date >= %s")
+        params.append(start_date)
+    else:
+        clauses.append("o.order_date >= CURRENT_DATE - (%s * INTERVAL '1 day')")
+        params.append(days)
+    if end_date is not None:
+        clauses.append("o.order_date < %s")
+        params.append(end_date + timedelta(days=1))
+    else:
+        clauses.append("o.order_date < CURRENT_DATE + INTERVAL '1 day'")
+    for column, value in (("ticker", ticker), ("client_id", client_id)):
+        if value is not None:
+            clauses.append(f"o.{column} = %s")
+            params.append(value)
+    if order_status is not None:
+        if order_status.upper() in ("CANCELLED", "CANCELED"):
+            clauses.append("UPPER(o.order_status) IN ('CANCELLED', 'CANCELED')")
+        else:
+            clauses.append("UPPER(o.order_status) = %s")
+            params.append(order_status.upper())
+    return " AND ".join(clauses), tuple(params)
+
+
+def _report_rows(query, params):
+    conn = get_warehouse_connection()
+    try:
+        df = pd.read_sql(query, conn, params=params)
+        for column in ("period", "order_date"):
+            if column in df:
+                df[column] = df[column].astype(str)
+        # JSON nulls rather than invalid NaN values.
+        return df.astype(object).where(pd.notna(df), None).to_dict(orient='records')
+    finally:
+        conn.close()
+
+
+def get_filtered_orders(limit=50, offset=0, **filters):
+    conditions, params = _order_conditions(**filters)
+    # One statement gives a consistent total, including pages beyond the last row.
+    query = f"""
+        WITH filtered AS (
+            SELECT o.order_id, o.ticker, o.client_id, o.order_type,
+                   o.order_status, o.price, o.quantity, o.order_date
+            FROM orders o WHERE {conditions}
+        ), page AS (
+            SELECT * FROM filtered ORDER BY order_date DESC, order_id DESC
+            LIMIT %s OFFSET %s
+        )
+        SELECT totals.total_orders, page.*
+        FROM (SELECT COUNT(*) AS total_orders FROM filtered) totals
+        LEFT JOIN page ON TRUE
+        ORDER BY page.order_date DESC, page.order_id DESC
+    """
+    rows = _report_rows(query, params + (limit, offset))
+    total = int(rows[0]['total_orders']) if rows else 0
+    orders = [{key: value for key, value in row.items() if key != 'total_orders'}
+              for row in rows if row['order_id'] is not None]
+    return {'total_orders': total, 'orders': orders, 'limit': limit, 'offset': offset}
+
+
+def get_trading_volume_metrics(**filters):
+    """Notional turnover, not net cash flow; defaults to executed orders only."""
+    filters.setdefault('order_status', 'FULFILLED')
+    conditions, params = _order_conditions(**filters)
+    return _report_rows(f"""
+        SELECT COUNT(*) AS total_orders,
+               COALESCE(SUM(o.quantity), 0) AS total_quantity,
+               COALESCE(SUM(o.quantity * o.price), 0) AS total_trading_volume,
+               COALESCE(SUM(o.quantity * o.price)
+                   FILTER (WHERE UPPER(o.order_type) = 'BUY'), 0) AS buy_volume,
+               COALESCE(SUM(o.quantity * o.price)
+                   FILTER (WHERE UPPER(o.order_type) = 'SELL'), 0) AS sell_volume
+        FROM orders o WHERE {conditions}
+    """, params)[0]
+
+
+def get_client_activity_trend(granularity='daily', **filters):
+    units = {'daily': 'day', 'weekly': 'week', 'monthly': 'month'}
+    unit = units[granularity]
+    conditions, params = _order_conditions(**filters)
+    return _report_rows(f"""
+        SELECT DATE_TRUNC('{unit}', o.order_date)::DATE AS period,
+               o.client_id, COUNT(*) AS trade_count,
+               COALESCE(SUM(o.quantity * o.price), 0) AS total_volume,
+               COUNT(DISTINCT o.ticker) AS instruments_traded
+        FROM orders o WHERE {conditions}
+        GROUP BY period, o.client_id ORDER BY period, o.client_id
+    """, params)
+
 
 def get_top_instruments(column = None, n = 10 ):
     # Top n instruments based on a specific column
@@ -214,9 +310,10 @@ def get_kpi_metrics(days=30):
     finally:
         conn.close()
 
-def get_instrument_metrics(days=30):
+def get_instrument_metrics(days=30, **filters):
     conn = get_warehouse_connection()
     try:
+        conditions, params = _order_conditions(days=days, **filters)
         query = f"""
         SELECT 
             i.ticker,
@@ -230,12 +327,12 @@ def get_instrument_metrics(days=30):
             COUNT(DISTINCT o.client_id) as unique_traders
         FROM instruments i
         LEFT JOIN orders o ON i.ticker = o.ticker
-            AND o.order_date >= CURRENT_DATE - INTERVAL '{days} days'
+            AND {conditions}
         GROUP BY i.ticker, i.asset_type
         ORDER BY total_volume DESC NULLS LAST
         """
         
-        df = pd.read_sql(query, conn)
+        df = pd.read_sql(query, conn, params=params)
         
         df = df.fillna(0)
         
@@ -252,7 +349,7 @@ def get_instrument_metrics(days=30):
     finally:
         conn.close()
 
-def get_timeseries_metrics(days=30, granularity='daily'):
+def get_timeseries_metrics(days=30, granularity='daily', **filters):
     conn = get_warehouse_connection()
     try:
         if granularity == 'daily':
@@ -265,6 +362,7 @@ def get_timeseries_metrics(days=30, granularity='daily'):
             granularity = 'daily'
             date_format = "DATE(o.order_date)"
         
+        conditions, params = _order_conditions(days=days, **filters)
         query = f"""
         SELECT 
             {date_format} as period,
@@ -274,12 +372,12 @@ def get_timeseries_metrics(days=30, granularity='daily'):
             COUNT(DISTINCT o.client_id) as active_clients,
             COUNT(DISTINCT o.ticker) as instruments_traded
         FROM orders o
-        WHERE o.order_date >= CURRENT_DATE - INTERVAL '{days} days'
+        WHERE {conditions}
         GROUP BY period
         ORDER BY period ASC
         """
         
-        df = pd.read_sql(query, conn)
+        df = pd.read_sql(query, conn, params=params)
         df = df.fillna(0)
         
         numeric_cols = ['trade_count', 'total_volume', 'avg_trade_value', 'active_clients', 'instruments_traded']
