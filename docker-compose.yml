@@ -3,7 +3,7 @@ version: '3.8'
 services:
   etl-analytics:
     build: .
-    container_name: etl-analytics
+    container_name: team10-etl-analytics
     network_mode: "host"
     environment:
       MAIN_DB_HOST: ${MAIN_DB_HOST}
